@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Text Decipherer — OCR Tool</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3347;
+    --accent: #6c5ce7;
+    --accent2: #a29bfe;
+    --text: #e8e8f0;
+    --text2: #9a9ab8;
+    --success: #00cec9;
+    --error: #ff7675;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    padding: 28px 20px 10px;
+    text-align: center;
+  }
+
+  header h1 {
+    font-size: 1.9rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent2), var(--accent), var(--success));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  header p {
+    color: var(--text2);
+    margin-top: 6px;
+    font-size: 0.95rem;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 960px;
+    padding: 16px 20px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* Controls Bar */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .controls label, .controls select {
+    font-size: 0.88rem;
+    color: var(--text2);
+  }
+
+  .controls select {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .controls select:focus { border-color: var(--accent); }
+
+  /* Drop Zone */
+  .dropzone {
+    position: relative;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 52px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.25s, background 0.25s;
+  }
+
+  .dropzone:hover,
+  .dropzone.drag-over {
+    border-color: var(--accent);
+    background: var(--surface2);
+  }
+
+  .dropzone .icon { font-size: 3rem; margin-bottom: 10px; }
+
+  .dropzone .main-text {
+    font-size: 1.08rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .dropzone .sub-text {
+    color: var(--text2);
+    font-size: 0.88rem;
+    margin-top: 6px;
+  }
+
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 14px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+    color: #fff;
+  }
+
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #7c5ce7);
+    box-shadow: 0 4px 18px rgba(108,92,231,0.25);
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .btn-success {
+    background: linear-gradient(135deg, #00b894, var(--success));
+    box-shadow: 0 4px 14px rgba(0,206,201,0.2);
+  }
+
+  .btn-danger {
+    background: var(--surface2);
+    border: 1px solid var(--error);
+    color: var(--error);
+  }
+
+  /* Preview */
+  .preview-section {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .preview-section.active { display: block; }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .preview-body {
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    background: var(--surface2);
+    position: relative;
+  }
+
+  .preview-body img {
+    max-width: 100%;
+    max-height: 420px;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  /* Image Adjustments */
+  .adjustments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .adjust-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .adjust-group label {
+    font-size: 0.82rem;
+    color: var(--text2);
+    min-width: 68px;
+  }
+
+  .adjust-group input[type="range"] {
+    width: 110px;
+    accent-color: var(--accent);
+  }
+
+  .adjust-group .val {
+    font-size: 0.8rem;
+    color: var(--accent2);
+    width: 38px;
+    text-align: right;
+  }
+
+  /* Progress */
+  .progress-section {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+
+  .progress-section.active { display: block; }
+
+  .progress-bar-container {
+    width: 100%;
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--success));
+    width: 0%;
+    transition: width 0.3s;
+    border-radius: 4px;
+  }
+
+  .progress-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text2);
+    margin-top: 8px;
+  }
+
+  /* Result */
+  .result-section {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .result-section.active { display: block; }
+
+  .result-body {
+    padding: 18px;
+  }
+
+  .result-textarea {
+    width: 100%;
+    min-height: 200px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 0.95rem;
+    font-family: 'Cascadia Code', 'Fira Code', monospace, sans-serif;
+    line-height: 1.65;
+    resize: vertical;
+    outline: none;
+  }
+
+  .result-textarea:focus { border-color: var(--accent); }
+
+  .result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 10px 18px 14px;
+    font-size: 0.82rem;
+    color: var(--text2);
+  }
+
+  .result-meta span { display: inline-flex; align-items: center; gap: 4px; }
+
+  .result-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 0 18px 16px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--success);
+    color: #000;
+    font-weight: 600;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: all 0.35s;
+    z-index: 999;
+    pointer-events: none;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Camera Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 900;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 90%;
+    max-width: 580px;
+    text-align: center;
+  }
+
+  .modal h3 { margin-bottom: 14px; }
+
+  .modal video {
+    width: 100%;
+    max-height: 360px;
+    border-radius: 8px;
+    background: #000;
+  }
+
+  .modal canvas { display: none; }
+
+  .modal .btn { margin-top: 14px; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    header h1 { font-size: 1.4rem; }
+    .dropzone { padding: 36px 16px; }
+    .adjustments { flex-direction: column; gap: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔍 Image Text Decipherer</h1>
+  <p>Extract text from any image — powered by Tesseract.js OCR running entirely in your browser</p>
+</header>
+
+<div class="container">
+
+  <!-- Controls -->
+  <div class="controls">
+    <label for="langSelect">OCR Language:</label>
+    <select id="langSelect">
+      <option value="eng" selected>English</option>
+      <option value="chi_sim">Chinese (Simplified)</option>
+      <option value="chi_tra">Chinese (Traditional)</option>
+      <option value="jpn">Japanese</option>
+      <option value="kor">Korean</option>
+      <option value="spa">Spanish</option>
+      <option value="fra">French</option>
+      <option value="deu">German</option>
+      <option value="ita">Italian</option>
+      <option value="por">Portuguese</option>
+      <option value="rus">Russian</option>
+      <option value="ara">Arabic</option>
+      <option value="hin">Hindi</option>
+      <option value="tha">Thai</option>
+      <option value="vie">Vietnamese</option>
+      <option value="tur">Turkish</option>
+      <option value="pol">Polish</option>
+      <option value="nld">Dutch</option>
+      <option value="swe">Swedish</option>
+      <option value="ukr">Ukrainian</option>
+      <option value="ces">Czech</option>
+      <option value="ron">Romanian</option>
+      <option value="hun">Hungarian</option>
+      <option value="fin">Finnish</option>
+      <option value="dan">Danish</option>
+      <option value="nor">Norwegian</option>
+      <option value="heb">Hebrew</option>
+      <option value="ind">Indonesian</option>
+      <option value="msa">Malay</option>
+      <option value="ben">Bengali</option>
+    </select>
+  </div>
+
+  <!-- Drop Zone -->
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="icon">📷</div>
+    <div class="main-text">Drop image here or click to upload</div>
+    <div class="sub-text">Supports JPG, PNG, BMP, WEBP, TIFF, GIF — any image with text</div>
+    <div class="action-buttons">
+      <button class="btn btn-secondary" id="btnPaste" type="button">📋 Paste from Clipboard</button>
+      <button class="btn btn-secondary" id="btnCamera" type="button">📸 Use Camera</button>
+      <button class="btn btn-secondary" id="btnURL" type="button">🔗 From URL</button>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-section" id="previewSection">
+    <div class="section-header">
+      <h3>📄 Image Preview</h3>
+      <button class="btn btn-danger btn-sm" id="btnRemove" type="button">✕ Remove</button>
+    </div>
+    <div class="preview-body">
+      <img id="previewImg" src="" alt="Preview">
+    </div>
+    <div class="adjustments">
+      <div class="adjust-group">
+        <label>Brightness</label>
+        <input type="range" id="adjBrightness" min="50" max="200" value="100">
+        <span class="val" id="valBrightness">100%</span>
+      </div>
+      <div class="adjust-group">
+        <label>Contrast</label>
+        <input type="range" id="adjContrast" min="50" max="300" value="100">
+        <span class="val" id="valContrast">100%</span>
+      </div>
+      <div class="adjust-group">
+        <label>Grayscale</label>
+        <input type="range" id="adjGrayscale" min="0" max="100" value="0">
+        <span class="val" id="valGrayscale">0%</span>
+      </div>
+      <button class="btn btn-secondary" id="btnResetAdj" type="button">↺ Reset</button>
+    </div>
+    <div style="padding: 14px 18px; text-align: center;">
+      <button class="btn btn-primary" id="btnExtract" type="button">🚀 Extract Text</button>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-section" id="progressSection">
+    <div style="font-weight:600;">⏳ Processing image…</div>
+    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="progress-text">
+      <span id="progressStatus">Initializing…</span>
+      <span id="progressPercent">0%</span>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-section" id="resultSection">
+    <div class="section-header">
+      <h3>📝 Extracted Text</h3>
+    </div>
+    <div class="result-body">
+      <textarea class="result-textarea" id="resultText" placeholder="Extracted text will appear here…"></textarea>
+    </div>
+    <div class="result-meta">
+      <span id="metaChars">Characters: 0</span>
+      <span id="metaWords">Words: 0</span>
+      <span id="metaConf">Avg Confidence: —</span>
+      <span id="metaTime">Time: —</span>
+    </div>
+    <div class="result-actions">
+      <button class="btn btn-success" id="btnCopy" type="button">📋 Copy Text</button>
+      <button class="btn btn-secondary" id="btnDownload" type="button">💾 Download .txt</button>
+      <button class="btn btn-secondary" id="btnNewScan" type="button">🔄 New Scan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Camera Modal -->
+<div class="modal-overlay" id="cameraModal">
+  <div class="modal">
+    <h3>📸 Camera Capture</h3>
+    <video id="cameraVideo" autoplay playsinline></video>
+    <canvas id="cameraCanvas"></canvas>
+    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="btnCapture" type="button">📸 Capture</button>
+      <button class="btn btn-danger" id="btnCloseCamera" type="button">✕ Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  // Elements
+  const dropzone       = document.getElementById('dropzone');
+  const fileInput      = document.getElementById('fileInput');
+  const btnPaste       = document.getElementById('btnPaste');
+  const btnCamera      = document.getElementById('btnCamera');
+  const btnURL         = document.getElementById('btnURL');
+  const previewSection = document.getElementById('previewSection');
+  const previewImg     = document.getElementById('previewImg');
+  const btnRemove      = document.getElementById('btnRemove');
+  const btnExtract     = document.getElementById('btnExtract');
+  const btnResetAdj    = document.getElementById('btnResetAdj');
+  const progressSection = document.getElementById('progressSection');
+  const progressBar    = document.getElementById('progressBar');
+  const progressStatus = document.getElementById('progressStatus');
+  const progressPercent = document.getElementById('progressPercent');
+  const resultSection  = document.getElementById('resultSection');
+  const resultText     = document.getElementById('resultText');
+  const metaChars      = document.getElementById('metaChars');
+  const metaWords      = document.getElementById('metaWords');
+  const metaConf       = document.getElementById('metaConf');
+  const metaTime       = document.getElementById('metaTime');
+  const btnCopy        = document.getElementById('btnCopy');
+  const btnDownload    = document.getElementById('btnDownload');
+  const btnNewScan     = document.getElementById('btnNewScan');
+  const langSelect     = document.getElementById('langSelect');
+  const toast          = document.getElementById('toast');
+  const cameraModal    = document.getElementById('cameraModal');
+  const cameraVideo    = document.getElementById('cameraVideo');
+  const cameraCanvas   = document.getElementById('cameraCanvas');
+  const btnCapture     = document.getElementById('btnCapture');
+  const btnCloseCamera = document.getElementById('btnCloseCamera');
+
+  // Adjustment sliders
+  const adjBrightness = document.getElementById('adjBrightness');
+  const adjContrast   = document.getElementById('adjContrast');
+  const adjGrayscale  = document.getElementById('adjGrayscale');
+  const valBrightness = document.getElementById('valBrightness');
+  const valContrast   = document.getElementById('valContrast');
+  const valGrayscale  = document.getElementById('valGrayscale');
+
+  let currentImageSrc = null;
+  let cameraStream    = null;
+
+  // ---- Toast ----
+  function showToast(msg, duration = 2500) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), duration);
+  }
+
+  // ---- Image Loading ----
+  function loadImage(src) {
+    currentImageSrc = src;
+    previewImg.src = src;
+    previewSection.classList.add('active');
+    resultSection.classList.remove('active');
+    progressSection.classList.remove('active');
+    resetAdjustments();
+    previewSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---- File Input ----
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    loadImage(await fileToDataURL(file));
+  });
+
+  // ---- Drag & Drop ----
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      loadImage(await fileToDataURL(file));
+    }
+  });
+
+  // ---- Paste from Clipboard ----
+  btnPaste.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find(t => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          loadImage(await fileToDataURL(blob));
+          return;
+        }
+      }
+      showToast('No image found in clipboard');
+    } catch {
+      showToast('Clipboard access denied — try Ctrl+V instead');
+    }
+  });
+
+  // Global paste listener
+  document.addEventListener('paste', async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const blob = item.getAsFile();
+        loadImage(await fileToDataURL(blob));
+        return;
+      }
+    }
+  });
+
+  // ---- URL ----
+  btnURL.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const url = prompt('Enter image URL:');
+    if (!url) return;
+    // Use a canvas to avoid CORS issues when possible
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      try {
+        loadImage(c.toDataURL('image/png'));
+      } catch {
+        // CORS blocked — use URL directly (Tesseract can still try)
+        loadImage(url);
+      }
+    };
+    img.onerror = () => showToast('Failed to load image from URL');
+    img.src = url;
+  });
+
+  // ---- Camera ----
+  btnCamera.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      cameraVideo.srcObject = cameraStream;
+      cameraModal.classList.add('active');
+    } catch {
+      showToast('Camera access denied');
+    }
+  });
+
+  btnCapture.addEventListener('click', () => {
+    cameraCanvas.width = cameraVideo.videoWidth;
+    cameraCanvas.height = cameraVideo.videoHeight;
+    cameraCanvas.getContext('2d').drawImage(cameraVideo, 0, 0);
+    loadImage(cameraCanvas.toDataURL('image/png'));
+    closeCamera();
+  });
+
+  btnCloseCamera.addEventListener('click', closeCamera);
+
+  function closeCamera() {
+    cameraModal.classList.remove('active');
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+  }
+
+  // ---- Remove Image ----
+  btnRemove.addEventListener('click', () => {
+    currentImageSrc = null;
+    previewImg.src = '';
+    previewSection.classList.remove('active');
+    resultSection.classList.remove('active');
+    progressSection.classList.remove('active');
+    fileInput.value = '';
+  });
+
+  // ---- Image Adjustments ----
+  function applyFilters() {
+    const b = adjBrightness.value;
+    const c = adjContrast.value;
+    const g = adjGrayscale.value;
+    previewImg.style.filter = `brightness(${b}%) contrast(${c}%) grayscale(${g}%)`;
+    valBrightness.textContent = b + '%';
+    valContrast.textContent = c + '%';
+    valGrayscale.textContent = g + '%';
+  }
+
+  adjBrightness.addEventListener('input', applyFilters);
+  adjContrast.addEventListener('input', applyFilters);
+  adjGrayscale.addEventListener('input', applyFilters);
+
+  function resetAdjustments() {
+    adjBrightness.value = 100;
+    adjContrast.value = 100;
+    adjGrayscale.value = 0;
+    applyFilters();
+  }
+
+  btnResetAdj.addEventListener('click', resetAdjustments);
+
+  // ---- Get Processed Image (apply filters via canvas) ----
+  function getProcessedImage() {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        ctx.filter = previewImg.style.filter || 'none';
+        ctx.drawImage(img, 0, 0);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.src = currentImageSrc;
+    });
+  }
+
+  // ---- OCR ----
+  btnExtract.addEventListener('click', async () => {
+    if (!currentImageSrc) return;
+
+    btnExtract.disabled = true;
+    progressSection.classList.add('active');
+    resultSection.classList.remove('active');
+    progressBar.style.width = '0%';
+    progressStatus.textContent = 'Initializing OCR engine…';
+    progressPercent.textContent = '0%';
+
+    const startTime = performance.now();
+    const lang = langSelect.value;
+
+    try {
+      const processedSrc = await getProcessedImage();
+
+      const { data } = await Tesseract.recognize(processedSrc, lang, {
+        logger: (info) => {
+          if (info.status) {
+            let label = info.status;
+            if (label === 'recognizing text') label = 'Recognizing text…';
+            else if (label === 'loading tesseract core') label = 'Loading OCR core…';
+            else if (label === 'initializing tesseract') label = 'Initializing engine…';
+            else if (label === 'loading language traineddata') label = `Loading ${lang} language data…`;
+            else if (label === 'initializing api') label = 'Preparing…';
+            else label = label.charAt(0).toUpperCase() + label.slice(1) + '…';
+
+            progressStatus.textContent = label;
+          }
+          if (typeof info.progress === 'number') {
+            const pct = Math.round(info.progress * 100);
+            progressBar.style.width = pct + '%';
+            progressPercent.textContent = pct + '%';
+          }
+        }
+      });
+
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+      const text = data.text.trim();
+
+      resultText.value = text || '(No text detected in this image)';
+      metaChars.textContent = `Characters: ${text.length}`;
+      metaWords.textContent = `Words: ${text ? text.split(/\s+/).filter(Boolean).length : 0}`;
+      metaConf.textContent  = `Avg Confidence: ${Math.round(data.confidence)}%`;
+      metaTime.textContent  = `Time: ${elapsed}s`;
+
+      progressSection.classList.remove('active');
+      resultSection.classList.add('active');
+      resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      if (text) showToast('✅ Text extracted successfully!');
+      else showToast('⚠️ No text could be detected');
+
+    } catch (err) {
+      console.error(err);
+      progressSection.classList.remove('active');
+      showToast('❌ OCR failed: ' + err.message);
+    }
+
+    btnExtract.disabled = false;
+  });
+  // ---- Copy ----
+  btnCopy.addEventListener('click', async () => {
+    const text = resultText.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('✅ Copied to clipboard!');
+    } catch {
+      // Fallback
+      resultText.select();
+      document.execCommand('copy');
+      showToast('✅ Copied to clipboard!');
+    }
+  });
+
+  // ---- Download ----
+  btnDownload.addEventListener('click', () => {
+    const text = resultText.value;
+    if (!text) return;
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const now = new Date();
+    const timestamp = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    a.download = `extracted-text-${timestamp}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('💾 File downloaded!');
+  });
+
+  // ---- New Scan ----
+  btnNewScan.addEventListener('click', () => {
+    currentImageSrc = null;
+    previewImg.src = '';
+    previewImg.style.filter = 'none';
+    previewSection.classList.remove('active');
+    resultSection.classList.remove('active');
+    progressSection.classList.remove('active');
+    fileInput.value = '';
+    resetAdjustments();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // ---- Keyboard shortcut: Ctrl+V global paste handled above ----
+  // ---- Keyboard shortcut: Ctrl+Enter to start extraction ----
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (currentImageSrc && !btnExtract.disabled) {
+        btnExtract.click();
+      }
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
